@@ -272,7 +272,10 @@ func (loader *Loader) resolveComponent(
 	}
 	fragment := parsedURL.Fragment
 	if !strings.HasPrefix(fragment, "/") {
-		return nil, fmt.Errorf("expected fragment prefix '#/' in URI %q", ref)
+		if fragment != "" {
+			return nil, fmt.Errorf("expected fragment prefix '#/' in URI %q", ref)
+		}
+		fragment = "/"
 	}
 
 	drill := func(cursor interface{}) (interface{}, error) {
