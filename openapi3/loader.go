@@ -126,7 +126,7 @@ func (loader *Loader) readURL(location *url.URL) ([]byte, error) {
 func (loader *Loader) LoadFromData(data []byte) (*T, error) {
 	loader.resetVisitedPathItemRefs()
 	doc := &T{}
-	if err := yaml.Unmarshal(data, doc); err != nil {
+	if err := yaml.UnmarshalStrict(data, doc); err != nil {
 		return nil, err
 	}
 	if err := loader.ResolveRefsIn(doc, nil); err != nil {

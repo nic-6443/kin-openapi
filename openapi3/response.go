@@ -1,7 +1,9 @@
 package openapi3
 
 import (
+	// "bytes"
 	"context"
+	// "encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -99,6 +101,10 @@ func (response *Response) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON sets Response to a copy of data.
 func (response *Response) UnmarshalJSON(data []byte) error {
 	return jsoninfo.UnmarshalStrictStruct(data, response)
+	// fmt.Println(">>>")
+	// d := json.NewDecoder(bytes.NewReader(data))
+	// d.DisallowUnknownFields()
+	// return d.Decode(&response)
 }
 
 // Validate returns an error if Response does not comply with the OpenAPI spec.
