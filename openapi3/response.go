@@ -1,14 +1,16 @@
 package openapi3
 
 import (
-	// "bytes"
+	"bytes"
 	"context"
-	// "encoding/json"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
+	"strings"
 
-	"github.com/getkin/kin-openapi/jsoninfo"
+	// "github.com/getkin/kin-openapi/jsoninfo"
 	"github.com/go-openapi/jsonpointer"
 )
 
@@ -61,7 +63,8 @@ func (responses Responses) JSONLookup(token string) (interface{}, error) {
 // Response is specified by OpenAPI/Swagger 3.0 standard.
 // See https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.0.3.md#responseObject
 type Response struct {
-	ExtensionProps
+	// ExtensionProps
+	Extensions map[string]json.RawMessage `json:"-" yaml:"-"`
 
 	Description *string `json:"description,omitempty" yaml:"description,omitempty"`
 	Headers     Headers `json:"headers,omitempty" yaml:"headers,omitempty"`
@@ -95,16 +98,115 @@ func (response *Response) WithJSONSchemaRef(schema *SchemaRef) *Response {
 
 // MarshalJSON returns the JSON encoding of Response.
 func (response *Response) MarshalJSON() ([]byte, error) {
-	return jsoninfo.MarshalStrictStruct(response)
+	// return jsoninfo.MarshalStrictStruct(response)
+	var illegals []string
+	for k := range response.Extensions {
+		if !strings.HasPrefix("x-", k) {
+			illegals = append(illegals, k)
+		}
+	}
+	if len(illegals) != 0 {
+		sort.Strings(illegals)
+		return nil, fmt.Errorf(`expected "x-" prefixes, got: %+v`, illegals)
+	}
+	type _Response Response
+	return json.Marshal(_Response(*response))
 }
 
 // UnmarshalJSON sets Response to a copy of data.
 func (response *Response) UnmarshalJSON(data []byte) error {
-	return jsoninfo.UnmarshalStrictStruct(data, response)
-	// fmt.Println(">>>")
+	// return jsoninfo.UnmarshalStrictStruct(data, response)
+
 	// d := json.NewDecoder(bytes.NewReader(data))
 	// d.DisallowUnknownFields()
 	// return d.Decode(&response)
+
+	// var x interface{}
+	// if err := json.Unmarshal(data, &x); err != nil {
+	// 	return err
+	// }
+	// y, ok := x.(map[string]interface{})
+	// if !ok {
+	// 	return fmt.Errorf("expected a mapping, got: %s", data)
+	// }
+	// if z:=y["description"];z!=nil{
+	// 	var w *string
+	// 	if err:=json.Unmarshal()
+	// }
+
+	// Description *string `json:"description,omitempty" yaml:"description,omitempty"`
+	// Headers     Headers `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// Content     Content `json:"content,omitempty" yaml:"content,omitempty"`
+	// Links       Links   `json:"links,omitempty" yaml:"links,omitempty"`
+
+	// var x struct {
+	// 	Description *string `json:"description,omitempty" yaml:"description,omitempty"`
+	// 	Headers     Headers `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// 	Content     Content `json:"content,omitempty" yaml:"content,omitempty"`
+	// 	Links       Links   `json:"links,omitempty" yaml:"links,omitempty"`
+	// 	// Extensions map[string]json.RawMessage `json:"-"`
+	// 	Extensions map[string]interface{} `json:"-" yaml:"-"`
+	// }
+	// if err := json.Unmarshal(data, &x); err != nil {
+	// 	return err
+	// }
+	// response.Description = x.Description
+	// response.Headers = x.Headers
+	// response.Content = x.Content
+	// response.Links = x.Links
+	// fmt.Printf(">>> %+v\n", response)
+	// fmt.Printf(">>> %+v\n", x.Extensions)
+	// fmt.Printf(">>> %#v\n", x.Extensions)
+	// return nil
+
+	if false { // THIS WORKS
+		d := json.NewDecoder(bytes.NewReader(data))
+		d.DisallowUnknownFields()
+		type _Response Response
+		var x _Response
+		if err := d.Decode(&x); err != nil {
+			return err
+		}
+		*response = Response(x)
+		return nil
+	}
+
+	d := json.NewDecoder(bytes.NewReader(data))
+	d.DisallowUnknownFields()
+	// var x struct {
+	// 	Description *string                    `json:"description,omitempty" yaml:"description,omitempty"`
+	// 	Headers     Headers                    `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// 	Content     Content                    `json:"content,omitempty" yaml:"content,omitempty"`
+	// 	Links       Links                      `json:"links,omitempty" yaml:"links,omitempty"`
+	// 	Extensions  map[string]json.RawMessage `json:"-" yaml:"-"`
+	// }
+	type _Response Response
+	var x _Response
+	if err := d.Decode(&x); err != nil {
+		return err
+	}
+	var m map[string]json.RawMessage
+	_ = json.Unmarshal(data, &m)
+	delete(m, "description")
+	delete(m, "headers")
+	delete(m, "content")
+	delete(m, "links")
+	x.Extensions = make(map[string]json.RawMessage, len(m))
+	var unknowns []string
+	for k, v := range m {
+		if strings.HasPrefix(k, "x-") {
+			x.Extensions[k] = v
+			delete(m, k)
+			continue
+		}
+		unknowns = append(unknowns, k)
+	}
+	if len(unknowns) != 0 {
+		sort.Strings(unknowns)
+		return fmt.Errorf("unknown fields: %+v", unknowns)
+	}
+	*response = Response(x)
+	return nil
 }
 
 // Validate returns an error if Response does not comply with the OpenAPI spec.

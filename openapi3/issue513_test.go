@@ -1,13 +1,13 @@
 package openapi3
 
 import (
-	"testing"
+  "testing"
 
-	"github.com/stretchr/testify/require"
+  "github.com/stretchr/testify/require"
 )
 
 func TestIssue513(t *testing.T) {
-	spec := `
+  spec := `
 openapi: "3.0.3"
 info:
   title: 'My app'
@@ -23,6 +23,7 @@ paths:
           description: Success
         default:
           description: '* **400** - Bad Request'
+          x-my-extension: {val: ue}
           # Notice here schema is invalid. It should instead be:
           # content:
           #   application/json:
@@ -41,8 +42,10 @@ components:
           type: string
 `[1:]
 
-	sl := NewLoader()
-	doc, err := sl.LoadFromData([]byte(spec))
-	require.Error(t, err)
-	require.Nil(t, doc)
+  sl := NewLoader()
+  t.Logf(">>> spec = %s", spec)
+  doc, err := sl.LoadFromData([]byte(spec))
+  t.Logf(">>> err = %v", err)
+  require.Error(t, err)
+  require.Nil(t, doc)
 }
