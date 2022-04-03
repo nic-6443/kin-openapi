@@ -1,7 +1,9 @@
 package openapi3
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 
 	"github.com/getkin/kin-openapi/jsoninfo"
 	"github.com/go-openapi/jsonpointer"
@@ -197,12 +199,45 @@ var _ jsonpointer.JSONPointable = (*ResponseRef)(nil)
 
 // MarshalJSON returns the JSON encoding of ResponseRef.
 func (value *ResponseRef) MarshalJSON() ([]byte, error) {
-	return jsoninfo.MarshalRef(value.Ref, value.Value)
+	// return jsoninfo.MarshalRef(value.Ref, value.Value)
+
+	if ref := value.Ref; ref != "" {
+		return json.Marshal(struct {
+			Ref string `json:"$ref" yaml:"$ref"`
+		}{Ref: ref})
+	}
+	return json.Marshal(value.Value)
 }
+
+// // RefHasSiblings is returned when a $ref is defined along with other fields
+// var RefHasSiblings refHasSiblings
+
+// type refHasSiblings struct{}
+
+// func (e refHasSiblings) Error() string {
+// 	return "properties additional to $ref are ignored"
+// }
 
 // UnmarshalJSON sets ResponseRef to a copy of data.
 func (value *ResponseRef) UnmarshalJSON(data []byte) error {
-	return jsoninfo.UnmarshalRef(data, &value.Ref, &value.Value)
+	// return jsoninfo.UnmarshalRef(data, &value.Ref, &value.Value)
+
+	var refOnly struct {
+		Ref string `json:"$ref,omitempty" yaml:"$ref,omitempty"`
+	}
+	if err := json.Unmarshal(data, &refOnly); err == nil && refOnly.Ref != "" {
+		value.Ref = refOnly.Ref
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.DisallowUnknownFields()
+		return dec.Decode(&refOnly)
+		// } else if strings.Contains(err.Error(), "json: unknown field") {
+		// 	// 	panic(err) // panic: json: unknown field "description"
+		// 	if true {
+		// 		panic(fmt.Sprintf(">>> refOnly:%#v err=%v", refOnly, err))
+		// 	}
+		// 	return RefHasSiblings
+	}
+	return json.Unmarshal(data, &value.Value)
 }
 
 // Validate returns an error if ResponseRef does not comply with the OpenAPI spec.

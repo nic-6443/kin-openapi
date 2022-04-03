@@ -412,14 +412,32 @@ func onlyOneReqBodyParam(bodies []*openapi3.RequestBodyRef, formDataSchemas map[
 	return nil, nil
 }
 
+func extensionPropsAsExtensions(eps openapi3.ExtensionProps) map[string]json.RawMessage {
+	es := eps.Extensions
+	m := make(map[string]json.RawMessage, len(es))
+	for k, v := range es {
+		m[k] = v.(json.RawMessage)
+	}
+	return m
+}
+
+func extensionsAsExtensionProps(m map[string]json.RawMessage) (eps openapi3.ExtensionProps) {
+	es := make(map[string]interface{}, len(m))
+	for k, v := range m {
+		es[k] = v
+	}
+	return openapi3.ExtensionProps{Extensions: es}
+}
+
 func ToV3Response(response *openapi2.Response) (*openapi3.ResponseRef, error) {
 	if ref := response.Ref; ref != "" {
 		return &openapi3.ResponseRef{Ref: ToV3Ref(ref)}, nil
 	}
-	stripNonCustomExtensions(response.Extensions)
+	// stripNonCustomExtensions(response.Extensions)
 	result := &openapi3.Response{
-		Description:    &response.Description,
-		ExtensionProps: response.ExtensionProps,
+		Description: &response.Description,
+		// Extensions:  extensionPropsAsExtensions(response.ExtensionProps),
+		Extensions: response.Extensions,
 	}
 	if schemaRef := response.Schema; schemaRef != nil {
 		result.WithJSONSchemaRef(ToV3SchemaRef(schemaRef))
@@ -1061,10 +1079,11 @@ func FromV3Response(ref *openapi3.ResponseRef, components *openapi3.Components) 
 	if desc := response.Description; desc != nil {
 		description = *desc
 	}
-	stripNonCustomExtensions(response.Extensions)
+	// stripNonCustomExtensions(response.Extensions)
 	result := &openapi2.Response{
-		Description:    description,
-		ExtensionProps: response.ExtensionProps,
+		Description: description,
+		// ExtensionProps: extensionsAsExtensionProps(response.Extensions),
+		Extensions: response.Extensions,
 	}
 	if content := response.Content; content != nil {
 		if ct := content["application/json"]; ct != nil {

@@ -1,9 +1,12 @@
 package openapi2
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/getkin/kin-openapi/jsoninfo"
 	"github.com/getkin/kin-openapi/openapi3"
@@ -224,7 +227,8 @@ func (parameter *Parameter) UnmarshalJSON(data []byte) error {
 }
 
 type Response struct {
-	openapi3.ExtensionProps
+	Extensions map[string]json.RawMessage `json:"-" yaml:"-"` // x-... fields
+
 	Ref         string                 `json:"$ref,omitempty" yaml:"$ref,omitempty"`
 	Description string                 `json:"description,omitempty" yaml:"description,omitempty"`
 	Schema      *openapi3.SchemaRef    `json:"schema,omitempty" yaml:"schema,omitempty"`
@@ -234,12 +238,81 @@ type Response struct {
 
 // MarshalJSON returns the JSON encoding of Response.
 func (response *Response) MarshalJSON() ([]byte, error) {
-	return jsoninfo.MarshalStrictStruct(response)
+	// return jsoninfo.MarshalStrictStruct(response)
+
+	var illegals []string
+	for k := range response.Extensions {
+		if !strings.HasPrefix(k, "x-") {
+			illegals = append(illegals, k)
+		}
+	}
+	if len(illegals) != 0 {
+		sort.Strings(illegals)
+		return nil, fmt.Errorf(`expected "x-" prefixes, got: %+v`, illegals) // move to Validate()
+	}
+
+	if ref := response.Ref; ref != "" {
+		return json.Marshal(struct {
+			Ref string `json:"$ref" yaml:"$ref"`
+		}{Ref: ref})
+	}
+
+	m := make(map[string]interface{}, 4+len(response.Extensions))
+	if x := response.Description; x != "" {
+		m["description"] = response.Description
+	}
+	if x := response.Schema; x != nil {
+		m["schema"] = x
+	}
+	if x := response.Headers; len(x) != 0 {
+		m["headers"] = x
+	}
+	if x := response.Examples; len(x) != 0 {
+		m["examples"] = x
+	}
+	for k, v := range response.Extensions {
+		m[k] = v
+	}
+	return json.Marshal(m)
+
 }
 
 // UnmarshalJSON sets Response to a copy of data.
 func (response *Response) UnmarshalJSON(data []byte) error {
-	return jsoninfo.UnmarshalStrictStruct(data, response)
+	// return jsoninfo.UnmarshalStrictStruct(data, response)
+
+	var refOnly struct {
+		Ref string `json:"$ref,omitempty" yaml:"$ref,omitempty"`
+	}
+	if err := json.Unmarshal(data, &refOnly); err == nil && refOnly.Ref != "" {
+		response.Ref = refOnly.Ref
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.DisallowUnknownFields()
+		return dec.Decode(&refOnly)
+	}
+
+	type ResponseBis Response
+	var x ResponseBis
+	if err := json.Unmarshal(data, &x); err != nil {
+		return err
+	}
+	_ = json.Unmarshal(data, &x.Extensions)
+	delete(x.Extensions, "description")
+	delete(x.Extensions, "schema")
+	delete(x.Extensions, "headers")
+	delete(x.Extensions, "examples")
+	var unknowns []string
+	for k := range x.Extensions {
+		if !strings.HasPrefix(k, "x-") {
+			unknowns = append(unknowns, k)
+		}
+	}
+	if len(unknowns) != 0 {
+		sort.Strings(unknowns)
+		return fmt.Errorf("unknown fields: %+v", unknowns)
+	}
+	*response = Response(x)
+	return nil
 }
 
 type Header struct {
@@ -260,7 +333,11 @@ type SecurityRequirements []map[string][]string
 
 type SecurityScheme struct {
 	openapi3.ExtensionProps
-	Ref              string            `json:"$ref,omitempty" yaml:"$ref,omitempty"`
+
+	// https://github.com/OAI/OpenAPI-Specification/blob/cede0ea56b887e29d0f46627503648d16340078d/versions/2.0.md#response-object
+	// A simple object to allow referencing other definitions in the specification. It can be used to reference parameters and responses that are defined at the top level for reuse.
+	Ref string `json:"$ref,omitempty" yaml:"$ref,omitempty"`
+
 	Description      string            `json:"description,omitempty" yaml:"description,omitempty"`
 	Type             string            `json:"type,omitempty" yaml:"type,omitempty"`
 	In               string            `json:"in,omitempty" yaml:"in,omitempty"`
